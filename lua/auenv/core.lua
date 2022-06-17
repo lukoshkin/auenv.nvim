@@ -1,11 +1,11 @@
-local json = require'json'
+local json = require'auenv.json'
 local auenv = {}
 
 
 function auenv.read (file)
   local fd = assert(io.open(file))
-  vim.g.auenv_dict = json.decode(fd:read('*a'))
-  auenv.dict = vim.g.auenv_dict or {} -- FIXME
+  auenv.dict = json.decode(fd:read('*a')) or {}
+  return auenv.dict
 end
 
 
@@ -48,9 +48,9 @@ function auenv.add (env)
     print("You haven't entered anything!")
     return
   elseif path == '.' then
-    path = vim.fn.expand('%:h')
+    path = vim.fn.expand('%:p:h')
   elseif path == '..' then
-    path = vim.fn.expand('%:h:h')
+    path = vim.fn.expand('%:p:h:h')
   end
 
   local assets = auenv.find(path)
@@ -72,12 +72,13 @@ function auenv.add (env)
 
   auenv.dict[env] = auenv.dict[env] or {}
   table.insert(auenv.dict[env], path)
-  print('New env added for folder ' .. path)
+  print('New env added for the folder ' .. path)
+  auenv.sync()
 end
 
 
-function auenv.auenv ()
-  local parent_dir = vim.fn.expand('%:h')
+function auenv.sync ()
+  local parent_dir = vim.fn.expand('%:p:h')
   local assets = auenv.find(parent_dir)
 
   local base_prefix = os.getenv('CONDA_PREFIX_1')
@@ -90,12 +91,12 @@ function auenv.auenv ()
     if env ~= vim.env.CONDA_DEFAULT_ENV then
       if vim.env.CONDA_DEFAULT_ENV == 'base' then
         vim.env.PATH = vim.env.PATH:gsub(
-          base_prefix .. 'bin',
-          base_prefix .. 'envs/' .. env ..'/bin')
+          base_prefix .. '/bin',
+          base_prefix .. '/envs/' .. env ..'/bin')
       else
         vim.env.PATH = vim.env.PATH:gsub(
-          base_prefix .. 'envs/' .. vim.env.CONDA_DEFAULT_ENV .. '/bin',
-          base_prefix .. 'envs/' .. env ..'/bin')
+          base_prefix .. '/envs/' .. vim.env.CONDA_DEFAULT_ENV .. '/bin',
+          base_prefix .. '/envs/' .. env ..'/bin')
       end
 
       vim.env.CONDA_DEFAULT_ENV = env
@@ -103,17 +104,15 @@ function auenv.auenv ()
   else
     if vim.env.CONDA_DEFAULT_ENV ~= 'base' then
       vim.env.PATH = vim.env.PATH:gsub(
-        base_prefix .. 'envs/' .. vim.env.CONDA_DEFAULT_ENV .. '/bin',
-        base_prefix .. 'bin')
-
+        base_prefix .. '/envs/' .. vim.env.CONDA_DEFAULT_ENV .. '/bin',
+        base_prefix .. '/bin')
 
       vim.env.CONDA_DEFAULT_ENV = 'base'
     end
   end
 
   --- Probably it requries to restart LSP server.
-  -- vim.lsp.stop_client(vim.lsp.get_active_clients())
-  -- vim.cmd ':edit'
+  -- vim.cmd ':LspRestart'
 end
 
 
@@ -127,9 +126,9 @@ function auenv.remove (path)
 end
 
 
-function auenv.write (fname)
+function auenv.write (file)
   local str = json.encode(auenv.dict)
-  local fd = assert(io.open(fname, 'w'))
+  local fd = assert(io.open(file, 'w'))
   fd:write(str)
   fd:close()
 end

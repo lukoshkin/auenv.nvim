@@ -1,3 +1,4 @@
+local lspconf = require'lspconfig.configs'
 local json = require'auenv.json'
 local auenv = {}
 
@@ -77,14 +78,25 @@ function auenv.add (env)
 end
 
 
+local function base_prefix ()
+  local prefix = os.getenv('CONDA_PREFIX_1')
+  if prefix == nil then
+    prefix = os.getenv('CONDA_PREFIX')
+    --- Make sure you get the desired result.
+    --- This action is only needed if you change CONDA_PREFIX
+    --- in the `auenv.sync` function call.
+    -- prefix = prefix:gsub('/envs/%S+', '')
+  end
+
+  return prefix
+end
+
+
 function auenv.sync ()
   local parent_dir = vim.fn.expand('%:p:h')
   local assets = auenv.find(parent_dir)
 
-  local base_prefix = os.getenv('CONDA_PREFIX_1')
-  if base_prefix == nil then
-    base_prefix = os.getenv('CONDA_PREFIX')
-  end
+  local base_prefix = base_prefix()
 
   local env = assets['env']
   if env ~= nil then
@@ -111,18 +123,86 @@ function auenv.sync ()
     end
   end
 
-  --- Probably it requries to restart LSP server.
-  -- vim.cmd ':LspRestart'
+  if vim.b.auenv_lsp_set ~= true then
+    auenv.update_diagnostics()
+  end
+end
+
+
+function auenv.update_diagnostics ()
+  --- Do nothing if lspconfig is not set up.
+  if lspconf == nil then
+    return
+  end
+
+  local bufname = vim.api.nvim_buf_get_name(0)
+
+  --- A modified version of ':LspRestart' function.
+  -- for _, client in pairs(vim.lsp.get_active_clients()) do
+  for _, client in pairs(vim.lsp.buf_get_clients(0)) do
+    --- We don't want to restart python LSP clients in non-python buffers,
+    --- since it will lead to pollution by irrelevant diagnostics.
+    if vim.api.nvim_buf_get_option(0, 'filetype') ~= 'python' then
+      --- Since a user can switch to another window, we check this
+      --- condition within the for loop, before restarting each client.
+      return
+    end
+
+    local handler = lspconf[client.name]
+    --- Similarly, we don't want to get for Python code diagnostics
+    --- of LSP clients targeting other filetypes. Moreover, 'auenv.nvim'
+    --- is intended for better in-Vim management of Python environments,
+    --- therefore, it more focused on correctly rendering diagnostics
+    --- of Python code specifically.
+    if handler and vim.fn.index(
+      handler.filetypes, 'python') >= 0 then
+      client.stop()
+      vim.defer_fn(function()
+        handler.launch()
+      end, 500)
+    end
+  end
+
+  vim.defer_fn(
+    function ()
+      --- If user haven't just switched to another buffer within 500ms
+      --- (e.g., switching too quickly to the Telescope window leads to
+      --- execution of ':e' on it; thus, requiring answer the prompt ─
+      --- 'Save changes to "Untitled"?')
+      if bufname == vim.api.nvim_buf_get_name(0) then
+        --- Reload the file (thus, refreshing its diagnostics).
+        vim.cmd ':edit'
+        --- While it is refreshing, we have time to
+        --- clear highlights, extmarks, virtual text.
+        vim.api.nvim_buf_clear_namespace(0, -1, 0, -1)
+
+        --- Don't hurry to set `auenv_lsp_set` flag.
+        vim.defer_fn(function ()
+          vim.b.auenv_lsp_set = true
+        end, 100)
+      end
+    end, 500)
+  --- If you can't get proper diagnostics, try to play
+  --- with the delays in `defer_fn` calls.
 end
 
 
 function auenv.remove (path)
+  --- Either a user specifies an abs path or nothing.
+  if path == nil then
+    path = vim.fn.expand('%:p:h')
+  end
+
   local assets = auenv.find(path)
   local env, i = assets['env'], assets['i']
 
-  if env ~= nil then
-    auenv.dict[env][i] = nil
+  if env == nil then
+    print('No registered env for ' .. path)
+    return
   end
+
+  auenv.dict[env][i] = nil
+  auenv.sync()
 end
 
 
@@ -133,15 +213,5 @@ function auenv.write (file)
   fd:close()
 end
 
-
----------------------------------
--- local function print_ae_dict()
---   for k, v in pairs(auenv.dict) do
---     print(k)
---     for i, p in ipairs(v) do
---       print(i, p)
---     end
---   end
--- end
 
 return auenv

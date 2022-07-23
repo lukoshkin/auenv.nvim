@@ -12,7 +12,7 @@ latter may depend on how well one sets up their LSP clients.
 
 ## Installation
 
-With [**packer**](https://github.com/wbthomason/packer.nvim)
+With [**Packer**](https://github.com/wbthomason/packer.nvim)
 
 ```lua
 use {
@@ -49,6 +49,13 @@ Intallation of this library is done via `install.sh` script (where only
 :AuEnv print
 :AuEnv edit
 
+" To mannually change a conda environment
+" (and freeze it for the current buffer), use
+
+:AuEnv set <env_name>
+:AuEnv unset                         " set to 'base'
+:unlet b:auenv_manually_set_env      " unfreeze
+
 " Deletion of keys that correspond to removed conda environments or
 " those having empty dict values is done with
 
@@ -70,5 +77,7 @@ add).
 - [ ] Fetching `json.lua` with git submodule (see
   [installation](#installation))
 - [ ] `maintain` (or `prune`) command (see [usage](#usage))
+- [ ] Integration with shell's `conda-autoenv`
 - [ ] Per file environment (see [usage](#usage))
+- [x] `set/unset` API commands
 - [ ] Tab completion/expansion

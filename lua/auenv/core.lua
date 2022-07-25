@@ -2,8 +2,8 @@ local fn = vim.fn
 local ve = vim.env
 local api = vim.api
 
+local json = require'json'
 local lspconf = require'lspconfig.configs'
-local json = require'auenv.json'
 
 local auenv = {}
 auenv._lsp_set = {}

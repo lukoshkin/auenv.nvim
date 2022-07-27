@@ -11,10 +11,11 @@ local function auenv_api (spec)
   --- More robust than using `unpack`
   --- which is also `table.unpack` since Lua 5.2.
 
-  local requires_arg = { 'add', 'edit', 'set' }
+  --- In case, there are more commands
+  --- requiring an arg, as it was before :)
+  local requires_arg = { 'set' }
 
-  if vim.tbl_contains(requires_arg, cmd)
-      and #spec.fargs ~= 2 then
+  if vim.tbl_contains(requires_arg, cmd) and #spec.fargs ~= 2 then
     print("AuEnv's " .. cmd .. '-command requires exactly one argument.')
     print('Usage: AuEnv <'.. cmd .. '> <arg>')
     return
@@ -27,6 +28,7 @@ local function auenv_api (spec)
   elseif cmd == 'print' then
     print(vim.inspect(auenv.dict))
   elseif cmd == 'edit' then
+    auenv.write() -- Update with `auenv.dict`.
     vim.cmd(':edit ' .. auenv.datafile)
 
   elseif cmd == 'set' then
@@ -60,17 +62,20 @@ api.nvim_create_autocmd('BufEnter', {
   group = aug_ae,
 })
 
+--- Update `auenv.dict` after editing `auenv.datafile`.
+api.nvim_create_autocmd('BufWritePost', {
+  callback = auenv.read,
+  pattern = auenv.datafile,
+  group = aug_ae,
+})
+
 api.nvim_create_autocmd('VimLeavePre', {
-  callback = function()
-    auenv.write()
-  end,
+  callback = auenv.write,
   group = aug_ae,
 })
 
 vim.api.nvim_create_autocmd('TermOpen', {
-  callback = function()
-    auenv.init_term()
-  end,
+  callback = auenv.init_term,
   group = aug_ae,
 })
 

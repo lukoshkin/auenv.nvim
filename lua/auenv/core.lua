@@ -22,25 +22,24 @@ end
 
 
 function auenv.find (path2check)
-  local cut = #path2check
   local assets = { env=nil, i=nil, full_match=nil }
   local maxpath = ''
 
   for env, paths in pairs(auenv.dict) do
     for i, path in ipairs(paths) do
-      if #path <= cut then
-        if path:sub(1, cut) == path2check then
+      if #path <= #path2check then
+        if path2check:sub(1, #path) == path then
           if #path > #maxpath then
-            assets['env'] = env
-            assets['i'] = i
             maxpath = path
+            assets.env = env
+            assets.i = i
           end
         end
       end
     end
   end
 
-  assets['full_match'] = maxpath == path2check
+  assets.full_match = maxpath == path2check
   return assets
 end
 
@@ -57,6 +56,13 @@ end
 
 
 function auenv.add (env)
+  if env == nil then
+    --- Base case scenario:
+    --- :AuEnv set some_env
+    --- :AuEnv add
+    env = ve.CONDA_DEFAULT_ENV
+  end
+
   if env == 'base' then
     print("Do not register 'base' environment.")
     return
@@ -79,10 +85,15 @@ function auenv.add (env)
 
   local assets = auenv.find(path)
 
-  if assets['full_match'] then
+  if assets.full_match then
+    if assets.env == env then
+      print('This rule is already in effect!')
+      return
+    end
+
     print('For the folder ' .. path ..
-      ', ' .. assets['env'] .. ' is already in use.')
-    local yn = fn.input('Override ' .. assets['env'] .. '? [yN]: ')
+      ', ' .. assets.env .. ' is already in use.')
+    local yn = fn.input('Override ' .. assets.env .. '? [yN]: ')
     print(' ') -- required to break the line after the prompt
 
     --- better than `yn:lower() == 'y'` ─ less work on average
@@ -148,7 +159,7 @@ function auenv.sync ()
   local assets = auenv.find(parent_dir)
   local bh = api.nvim_win_get_buf(0)
 
-  local env = assets['env']
+  local env = assets.env
   if env ~= nil then
     if env ~= ve.CONDA_DEFAULT_ENV then
       auenv.set(env)
@@ -237,14 +248,17 @@ function auenv.remove (path)
   end
 
   local assets = auenv.find(path)
-  local env, i = assets['env'], assets['i']
+  local env, i = assets.env, assets.i
 
   if env == nil then
     print('No registered env for ' .. path)
     return
   end
 
-  auenv.dict[env][i] = nil
+  -- auenv.dict[env][i] = nil
+  --- `table.remove` reindexes elements after removal. This is what we need,
+  --- but NOTE: it deteriorates efficiency for big arrays.
+  table.remove(auenv.dict[env], i)
   auenv.sync()
 end
 

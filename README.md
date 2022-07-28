@@ -12,12 +12,17 @@ latter may depend on how well one sets up their LSP clients.
 
 ## Installation
 
-With [**packer**](https://github.com/wbthomason/packer.nvim)
+With [**Packer**](https://github.com/wbthomason/packer.nvim)
 
 ```lua
 use {
+  'rxi/json.lua',
+  run = 'mkdir -p lua/json && mv json.lua lua/json/init.lua',
+}
+
+use {
   'lukoshkin/auenv.nvim',
-  run = './install.sh',
+  requires = 'rxi/json.lua',
   config = function ()
     require'auenv'.setup {
       --- The only available customization.
@@ -27,12 +32,6 @@ use {
   end
 }
 ```
-
-The project [auenv.nvim](https://github.com/lukoshkin/auenv.nvim) relies
-on [json.lua](https://github.com/rxi/json.lua) when working with json files.
-Intallation of this library is done via `install.sh` script (where only
-`json.lua` is fetched). In the future, we possibly switch from
-`run='./install.sh'` to `run='git submodule update --init'`.
 
 
 ## Usage
@@ -48,6 +47,13 @@ Intallation of this library is done via `install.sh` script (where only
 
 :AuEnv print
 :AuEnv edit
+
+" To mannually change a conda environment
+" (and freeze it for the current buffer), use
+
+:AuEnv set <env_name>
+:AuEnv unset                         " set to 'base'
+:unlet b:auenv_manually_set_env      " unfreeze
 
 " Deletion of keys that correspond to removed conda environments or
 " those having empty dict values is done with
@@ -67,8 +73,8 @@ add).
 
 ## Future Development
 
-- [ ] Fetching `json.lua` with git submodule (see
-  [installation](#installation))
 - [ ] `maintain` (or `prune`) command (see [usage](#usage))
+- [ ] Integration with shell's `conda-autoenv`
 - [ ] Per file environment (see [usage](#usage))
+- [x] `set/unset` API commands
 - [ ] Tab completion/expansion

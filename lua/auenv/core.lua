@@ -2,42 +2,67 @@ local fn = vim.fn
 local ve = vim.env
 local api = vim.api
 
+local json = require'json'
 local lspconf = require'lspconfig.configs'
-local json = require'auenv.json'
+
 local auenv = {}
+auenv._lsp_set = {}
 
 
 function auenv.read ()
-  local fd = assert(io.open(auenv.datafile))
-  auenv.dict = json.decode(fd:read('*a')) or {}
+  local fd = io.open(auenv.datafile)
+
+  if not fd then
+    auenv.dict = {}
+    return
+  end
+
+  auenv.dict = json.decode(fd:read('*a'))
 end
 
 
 function auenv.find (path2check)
-  local cut = #path2check
   local assets = { env=nil, i=nil, full_match=nil }
   local maxpath = ''
 
   for env, paths in pairs(auenv.dict) do
     for i, path in ipairs(paths) do
-      if #path <= cut then
-        if path:sub(1, cut) == path2check then
+      if #path <= #path2check then
+        if path2check:sub(1, #path) == path then
           if #path > #maxpath then
-            assets['env'] = env
-            assets['i'] = i
             maxpath = path
+            assets.env = env
+            assets.i = i
           end
         end
       end
     end
   end
 
-  assets['full_match'] = maxpath == path2check
+  assets.full_match = maxpath == path2check
   return assets
 end
 
 
+function auenv.init_term ()
+  --- If-statement works only in case there is no interference
+  --- with other processes or hooks that manage conda environments.
+  if ve.CONDA_DEFAULT_ENV ~= auenv._wellcoming_env then
+    local tji = api.nvim_buf_get_var(0, 'terminal_job_id')
+    local cmd = 'conda activate ' .. ve.CONDA_DEFAULT_ENV
+    api.nvim_chan_send(tji, cmd .. ' && clear\n')
+  end
+end
+
+
 function auenv.add (env)
+  if env == nil then
+    --- Base case scenario:
+    --- :AuEnv set some_env
+    --- :AuEnv add
+    env = ve.CONDA_DEFAULT_ENV
+  end
+
   if env == 'base' then
     print("Do not register 'base' environment.")
     return
@@ -60,10 +85,15 @@ function auenv.add (env)
 
   local assets = auenv.find(path)
 
-  if assets['full_match'] then
+  if assets.full_match then
+    if assets.env == env then
+      print('This rule is already in effect!')
+      return
+    end
+
     print('For the folder ' .. path ..
-      ', ' .. assets['env'] .. ' is already in use.')
-    local yn = fn.input('Override ' .. assets['env'] .. '? [yN]: ')
+      ', ' .. assets.env .. ' is already in use.')
+    local yn = fn.input('Override ' .. assets.env .. '? [yN]: ')
     print(' ') -- required to break the line after the prompt
 
     --- better than `yn:lower() == 'y'` ─ less work on average
@@ -96,41 +126,55 @@ local function base_prefix ()
 end
 
 
+function auenv.set (env)
+  local bp = base_prefix()
+  local env_prefix = bp .. '/envs/' .. env
+  ve.PATH = ve.PATH:gsub(ve.CONDA_PREFIX .. '/bin', env_prefix ..'/bin')
+
+  ve.CONDA_DEFAULT_ENV = env
+  ve.CONDA_PREFIX = env_prefix
+  ve.CONDA_PREFIX_1 = bp
+end
+
+
+function auenv.unset ()
+  local bp = base_prefix()
+  ve.PATH = ve.PATH:gsub(ve.CONDA_PREFIX .. '/bin', bp .. '/bin')
+
+  ve.CONDA_DEFAULT_ENV = 'base'
+  ve.CONDA_PREFIX = bp
+  ve.CONDA_PREFIX_1 = nil
+end
+
+
 function auenv.sync ()
+  if vim.b.auenv_manually_set_env ~= nil then
+    if ve.CONDA_DEFAULT_ENV ~= vim.b.auenv_manually_set_env then
+      auenv.set(vim.b.auenv_manually_set_env)
+    end
+    return
+  end
+
   local parent_dir = fn.expand('%:p:h')
   local assets = auenv.find(parent_dir)
+  local bh = api.nvim_win_get_buf(0)
 
-  local base_prefix = base_prefix()
-
-  local env = assets['env']
+  local env = assets.env
   if env ~= nil then
     if env ~= ve.CONDA_DEFAULT_ENV then
-      local env_prefix = base_prefix .. '/envs/' .. env
-      ve.PATH = ve.PATH:gsub(ve.CONDA_PREFIX .. '/bin', env_prefix ..'/bin')
-
-      ve.CONDA_DEFAULT_ENV = env
-      ve.CONDA_PREFIX_1 = base_prefix
-      ve.CONDA_PREFIX = env_prefix
-
+      auenv.set(env)
+      auenv._lsp_set[bh] = false
       --- Mark for diagnostics update.
-      vim.b.auenv_lsp_set = false
     end
   else
     if ve.CONDA_DEFAULT_ENV ~= 'base' then
-      ve.PATH = ve.PATH:gsub(
-        ve.CONDA_PREFIX .. '/bin',
-        base_prefix .. '/bin')
-
-      ve.CONDA_DEFAULT_ENV = 'base'
-      ve.CONDA_PREFIX = base_prefix
-      ve.CONDA_PREFIX_1 = nil
-
+      auenv.unset()
+      auenv._lsp_set[bh] = false
       --- Mark for diagnostics update.
-      vim.b.auenv_lsp_set = false
     end
   end
 
-  if vim.b.auenv_lsp_set ~= true then
+  if not auenv._lsp_set[bh] then
     auenv.update_diagnostics()
   end
 end
@@ -143,10 +187,14 @@ function auenv.update_diagnostics ()
   end
 
   local bufname = api.nvim_buf_get_name(0)
+  local clients = vim.lsp.buf_get_clients(0)
+
+  if next(clients) == nil then
+    return
+  end
 
   --- A modified version of ':LspRestart' function.
-  -- for _, client in pairs(vim.lsp.get_active_clients()) do
-  for _, client in pairs(vim.lsp.buf_get_clients(0)) do
+  for _, client in pairs(clients) do
     --- We don't want to restart python LSP clients in non-python buffers,
     --- since it will lead to pollution by irrelevant diagnostics.
     if api.nvim_buf_get_option(0, 'filetype') ~= 'python' then
@@ -182,9 +230,9 @@ function auenv.update_diagnostics ()
         --- May be relevant only to LSP clients configured via null-ls.
         vim.cmd ':edit'
 
-        --- Don't hurry to set `auenv_lsp_set` flag.
+        --- Don't hurry to set `_lsp_set` flag.
         vim.defer_fn(function ()
-          vim.b.auenv_lsp_set = true
+          auenv._lsp_set[api.nvim_win_get_buf(0)] = true
         end, 100)
       end
     end, 500)
@@ -200,14 +248,17 @@ function auenv.remove (path)
   end
 
   local assets = auenv.find(path)
-  local env, i = assets['env'], assets['i']
+  local env, i = assets.env, assets.i
 
   if env == nil then
     print('No registered env for ' .. path)
     return
   end
 
-  auenv.dict[env][i] = nil
+  -- auenv.dict[env][i] = nil
+  --- `table.remove` reindexes elements after removal. This is what we need,
+  --- but NOTE: it deteriorates efficiency for big arrays.
+  table.remove(auenv.dict[env], i)
   auenv.sync()
 end
 
@@ -215,6 +266,7 @@ end
 function auenv.write ()
   local str = json.encode(auenv.dict)
   local fd = assert(io.open(auenv.datafile, 'w'))
+  --- `init.lua` takes care of the parent dir's creation.
   fd:write(str)
   fd:close()
 end

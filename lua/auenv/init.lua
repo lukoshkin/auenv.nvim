@@ -31,18 +31,13 @@ local function auenv_api (spec)
     auenv.write() -- Update with `auenv.dict`.
     vim.cmd(':edit ' .. auenv.datafile)
 
-  elseif cmd == 'set' then
-    if arg == 'base' then
-      auenv.unset()
-      return
-    end
-
+  elseif cmd == 'set' and arg ~= 'base' then
     auenv.set(arg)
     vim.b.auenv_manually_set_env = arg
     auenv.update_diagnostics()
     --- Force-update diagnostics.
 
-  elseif cmd == 'unset' then
+  elseif cmd == 'unset' or cmd == 'set' then
     auenv.unset()
     vim.b.auenv_manually_set_env = 'base'
     auenv.update_diagnostics()
@@ -88,7 +83,6 @@ function M.setup (conf)
   os.execute('mkdir -p ' .. parent)
 
   auenv.datafile = conf.auenv_datafile or default_path
-  auenv._wellcoming_env = vim.env.CONDA_DEFAULT_ENV
   auenv.read()
 end
 

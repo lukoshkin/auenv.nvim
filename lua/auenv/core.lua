@@ -45,13 +45,17 @@ end
 
 
 function auenv.init_term ()
-  --- If-statement works only in case there is no interference
-  --- with other processes or hooks that manage conda environments.
-  if ve.CONDA_DEFAULT_ENV ~= auenv._wellcoming_env then
-    local tji = api.nvim_buf_get_var(0, 'terminal_job_id')
-    local cmd = 'conda activate ' .. ve.CONDA_DEFAULT_ENV
-    api.nvim_chan_send(tji, cmd .. ' && clear\n')
+  --- Opening terminal with bterm.nvim starts a non-interactive shell,
+  --- that is, rc-files are not sourced, and 'base' conda env is always
+  --- activated on startup.
+
+  if ve.CONDA_DEFAULT_ENV == 'base' then
+    return
   end
+
+  local tji = api.nvim_buf_get_var(0, 'terminal_job_id')
+  local cmd = 'conda activate ' .. ve.CONDA_DEFAULT_ENV
+  api.nvim_chan_send(tji, cmd .. ' && clear\n')
 end
 
 

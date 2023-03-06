@@ -53,7 +53,11 @@ function auenv.init_term ()
     return
   end
 
-  local tji = api.nvim_buf_get_var(0, 'terminal_job_id')
+  local ok, tji = pcall(api.nvim_buf_get_var, 0, 'terminal_job_id')
+  if not ok then
+    return
+  end
+
   local cmd = 'conda activate ' .. ve.CONDA_DEFAULT_ENV
   api.nvim_chan_send(tji, cmd .. ' && clear\n')
 end
@@ -72,10 +76,8 @@ function auenv.add (env)
     return
   end
 
-  --- `vim.ui.input` may be better in general
-  --- but seems not as convenient here.
-  local path = fn.input(
-    'Activate ' .. env .. ' when loading the content of ', vim.loop.cwd())
+  local path = fn.input('Activate ' .. env ..
+    ' when loading the content of ', vim.loop.cwd(), 'file')
   print(' ') -- required to break the line after the prompt
 
   if path == '' then
@@ -116,7 +118,7 @@ function auenv.add (env)
 end
 
 
-local function base_prefix ()
+function auenv.base_prefix ()
   local prefix = os.getenv('CONDA_PREFIX_1')
   if prefix == nil then
     prefix = os.getenv('CONDA_PREFIX')
@@ -131,7 +133,7 @@ end
 
 
 function auenv.set (env)
-  local bp = base_prefix()
+  local bp = auenv.base_prefix()
   local env_prefix = bp .. '/envs/' .. env
   ve.PATH = ve.PATH:gsub(ve.CONDA_PREFIX .. '/bin', env_prefix ..'/bin')
 
@@ -142,7 +144,7 @@ end
 
 
 function auenv.unset ()
-  local bp = base_prefix()
+  local bp = auenv.base_prefix()
   ve.PATH = ve.PATH:gsub(ve.CONDA_PREFIX .. '/bin', bp .. '/bin')
 
   ve.CONDA_DEFAULT_ENV = 'base'

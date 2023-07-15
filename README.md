@@ -1,4 +1,4 @@
-# Conda Auto-Environment for Neovim
+# Auto-Fetching Python Environment in Neovim
 
 `AuEnv` automatically activates 'known' environments (see [usage
 section](#usage)), thus making terminal sessions and buffer diagnostics more
@@ -35,6 +35,8 @@ use {
 
 
 ## Usage
+
+AuEnv's tab completion is now enabled! Use it for hints.
 
 ```vim
 :AuEnv add <env_name>
@@ -73,8 +75,9 @@ add).
 
 ## Future Development
 
+- [ ] Add Virtualenv support
 - [ ] `maintain` (or `prune`) command (see [usage](#usage))
 - [ ] Integration with shell's `conda-autoenv`
 - [ ] Per file environment (see [usage](#usage))
 - [x] `set/unset` API commands
-- [ ] Tab completion/expansion
+- [x] Tab completion/expansion

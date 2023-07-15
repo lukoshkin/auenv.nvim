@@ -186,6 +186,11 @@ function auenv.sync ()
 end
 
 
+local function is_buf_type_python()
+  return api.nvim_buf_get_option(0, 'filetype') == 'python'
+end
+
+
 function auenv.update_diagnostics ()
   --- Do nothing if lspconfig is not set up.
   if lspconf == nil then
@@ -200,10 +205,13 @@ function auenv.update_diagnostics ()
   end
 
   --- A modified version of ':LspRestart' function.
+  --- NOTE: Previously, 'https://github.com/neovim/nvim-lspconfig' implemented
+  --- ':LspRestart' with the use of `defer_fn`, now they switched to
+  --- `uv.new_timer` and `schedule_wrap`.
   for _, client in pairs(clients) do
     --- We don't want to restart python LSP clients in non-python buffers,
     --- since it will lead to pollution by irrelevant diagnostics.
-    if api.nvim_buf_get_option(0, 'filetype') ~= 'python' then
+    if not is_buf_type_python() then
       --- Since a user can switch to another window, we check this
       --- condition within the for loop, before restarting each client.
       return
@@ -219,7 +227,9 @@ function auenv.update_diagnostics ()
       handler.filetypes, 'python') >= 0 then
       client.stop()
       vim.defer_fn(function()
-        handler.launch()
+        if is_buf_type_python() then
+          handler.launch()
+        end
       end, 500)
     end
   end
@@ -235,15 +245,9 @@ function auenv.update_diagnostics ()
         --- Reload the file (thus, refreshing its diagnostics).
         --- May be relevant only to LSP clients configured via null-ls.
         vim.cmd ':edit'
-
-        --- Don't hurry to set `_lsp_set` flag.
-        vim.defer_fn(function ()
-          auenv._lsp_set[api.nvim_win_get_buf(0)] = true
-        end, 100)
+        auenv._lsp_set[api.nvim_win_get_buf(0)] = true
       end
     end, 500)
-  --- If you can't get proper diagnostics, try to play
-  --- with the delays in `defer_fn` calls.
 end
 
 

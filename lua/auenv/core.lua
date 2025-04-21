@@ -3,7 +3,6 @@ local ve = vim.env
 local api = vim.api
 
 local json = require "json"
-local lspconf = require "lspconfig.configs"
 
 local auenv = {}
 auenv._lsp_set = {}
@@ -182,26 +181,24 @@ function auenv.sync()
 end
 
 local function is_buf_type_python()
-  return api.nvim_buf_get_option(0, "filetype") == "python"
+  return api.nvim_get_option_value("filetype", { buf = 0 }) == "python"
 end
 
 function auenv.update_diagnostics()
   --- Do nothing if lspconfig is not set up.
-  if lspconf == nil then
+  local ok, lspconf = pcall(require, "lspconfig.configs")
+  if not ok then
     return
   end
 
   local bufname = api.nvim_buf_get_name(0)
-  local clients = vim.lsp.buf_get_clients(0)
+  local clients = vim.lsp.get_clients { bufnr = 0 }
 
   if next(clients) == nil then
     return
   end
 
-  --- A modified version of ':LspRestart' function.
-  --- NOTE: Previously, 'https://github.com/neovim/nvim-lspconfig' implemented
-  --- ':LspRestart' with the use of `defer_fn`, now they switched to
-  --- `uv.new_timer` and `schedule_wrap`.
+
   for _, client in pairs(clients) do
     --- We don't want to restart python LSP clients in non-python buffers,
     --- since it will lead to pollution by irrelevant diagnostics.
@@ -211,17 +208,16 @@ function auenv.update_diagnostics()
       return
     end
 
-    local handler = lspconf[client.name]
     --- Similarly, we don't want to get for Python code diagnostics
     --- of LSP clients targeting other filetypes. Moreover, 'auenv.nvim'
     --- is intended for better in-Vim management of Python environments,
     --- therefore, it more focused on correctly rendering diagnostics
     --- of Python code specifically.
-    if handler and fn.index(handler.filetypes, "python") >= 0 then
+    if vim.tbl_contains(client.config.filetypes, "python") then
       client.stop()
       vim.defer_fn(function()
         if is_buf_type_python() then
-          handler.launch()
+          vim.lsp.start(client.config)
         end
       end, 500)
     end

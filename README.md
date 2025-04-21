@@ -9,7 +9,6 @@ conda environment. However, it does not guarantee that after it updates buffer
 diagnostics and removes irrelevant ones, none of relevant will be removed. The
 latter may depend on how well one sets up their LSP clients.
 
-
 ## Installation
 
 With [**Packer**](https://github.com/wbthomason/packer.nvim)
@@ -33,6 +32,26 @@ use {
 }
 ```
 
+With [**Lazy**](https://github.com/folke/lazy.nvim)
+
+```lua
+{
+  'rxi/json.lua',
+  build = 'mkdir -p lua/json && mv json.lua lua/json/init.lua',
+},
+
+{
+  'lukoshkin/auenv.nvim',
+  dependencies = 'rxi/json.lua',
+  config = function ()
+    require'auenv'.setup { -- For example:
+      if vim.env.CONDA_PREFIX ~= nil then
+        require("auenv").setup()
+      end
+    }
+  end
+}
+```
 
 ## Usage
 
@@ -50,7 +69,7 @@ AuEnv's tab completion is now enabled! Use it for hints.
 :AuEnv print
 :AuEnv edit
 
-" To mannually change a conda environment
+" To manually change a conda environment
 " (and freeze it for the current buffer), use
 
 :AuEnv set <env_name>

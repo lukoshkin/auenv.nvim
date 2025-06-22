@@ -73,7 +73,7 @@ function auenv.add(env)
 
   local path = fn.input(
     "Activate " .. env .. " when loading the content of ",
-    vim.loop.cwd(),
+    vim.uv.cwd(),
     "file"
   )
   print " " -- required to break the line after the prompt
@@ -186,18 +186,12 @@ end
 
 function auenv.update_diagnostics()
   --- Do nothing if lspconfig is not set up.
-  local ok, lspconf = pcall(require, "lspconfig.configs")
-  if not ok then
-    return
-  end
-
   local bufname = api.nvim_buf_get_name(0)
   local clients = vim.lsp.get_clients { bufnr = 0 }
 
   if next(clients) == nil then
     return
   end
-
 
   for _, client in pairs(clients) do
     --- We don't want to restart python LSP clients in non-python buffers,
@@ -211,10 +205,12 @@ function auenv.update_diagnostics()
     --- Similarly, we don't want to get for Python code diagnostics
     --- of LSP clients targeting other filetypes. Moreover, 'auenv.nvim'
     --- is intended for better in-Vim management of Python environments,
-    --- therefore, it more focused on correctly rendering diagnostics
+    --- therefore, it is more focused on correctly rendering diagnostics
     --- of Python code specifically.
-    if vim.tbl_contains(client.config.filetypes, "python") then
-      client.stop()
+    local client_cfg = vim.lsp.config[client.name]
+    local filetypes = client_cfg ~= nil and client_cfg.filetypes or {}
+    if vim.tbl_contains(filetypes, "python") then
+      client:stop()
       vim.defer_fn(function()
         if is_buf_type_python() then
           vim.lsp.start(client.config)
